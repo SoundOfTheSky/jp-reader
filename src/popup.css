@@ -1,0 +1,47 @@
+body {
+  min-width: 240px;
+  padding: 16px;
+  background-color: #1c1b22;
+  color: #eee;
+  font-size: 16px;
+  font-family:
+    system-ui,
+    -apple-system,
+    Roboto,
+    'Segoe UI',
+    Arial;
+}
+
+.title {
+  margin-bottom: 16px;
+  font-size: 24px;
+}
+
+input[type='text'],
+select {
+  width: 100%;
+  padding: 0;
+  border: none;
+  border-bottom: 1px solid #737373;
+  background-color: transparent;
+  color: #eee;
+  font-size: 16px;
+}
+
+input:disabled,
+select:disabled {
+  border-bottom: 1px solid hsl(0deg 0% 35%);
+  color: hsl(0deg 0% 75%);
+}
+
+input[type='text']:focus {
+  border-bottom: 1px solid lawngreen;
+  outline: none;
+}
+
+.bulb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background-color: yellow;
+}

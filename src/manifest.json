@@ -1,0 +1,61 @@
+{
+  "action": {
+    "default_icon": {
+      "16": "assets/icon16.webp",
+      "19": "assets/icon19.webp",
+      "32": "assets/icon32.webp",
+      "38": "assets/icon38.webp",
+      "48": "assets/icon48.webp",
+      "64": "assets/icon64.webp",
+      "128": "assets/icon128.webp"
+    },
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ]
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      },
+      "id": "anki-annotation@soundofthesky"
+    }
+  },
+  "content_scripts": [
+    {
+      "js": [
+        "content.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval';"
+  },
+  "description": "Annotate Japanese words with useful information.",
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "icons": {
+    "16": "assets/icon16.webp",
+    "19": "assets/icon19.webp",
+    "32": "assets/icon32.webp",
+    "38": "assets/icon38.webp",
+    "48": "assets/icon48.webp",
+    "64": "assets/icon64.webp",
+    "128": "assets/icon128.webp"
+  },
+  "manifest_version": 3,
+  "name": "JP Reader",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ]
+}
