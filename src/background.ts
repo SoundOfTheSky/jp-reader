@@ -54,22 +54,23 @@ let ankiAvailable = false
 let ankiKanjiAvailable = false
 let storage: SyncStorage
 let tokenizer: Tokenizer
+const initPromise = initialize()
 
-chrome.runtime.onInstalled.addListener(() => {
-  void chrome.storage.sync.set({
-    ankiEnabled: false,
-    ankiExpressionField: 'Expression',
-    ankiKanjiEnabled: false,
-    ankiKanjiField: 'Kanji',
-    ankiKanjiQuery: '"note:JP Kanji"',
-    ankiQuery: '"note:JP Vocab"',
-    ankiUrl: 'http://127.0.0.1:8765',
-    enabled: true,
-    furigana: FuriganaMode.HIRAGANA,
-  } satisfies SyncStorage)
+chrome.runtime.onMessage.addListener(async (message: Message) => {
+  await initPromise
+  switch (message.type) {
+    case 'tokenize':
+      return tokenize(message.text)
+    case 'checkConnection':
+      return checkConnection()
+    case 'storageGet':
+      return chrome.storage.sync.get()
+    case 'storageSet':
+      return storageSet(message.data)
+    case 'getKanjiIntervals':
+      return getKanjiIntervals()
+  }
 })
-
-void initialize()
 
 async function getKanjiIntervals() {
   await updateAnkiIntervals()
@@ -271,10 +272,29 @@ async function storageSet(data: Partial<SyncStorage>) {
   }
 }
 
-async function initialize() {
+async function initializeStorage() {
+  const DEFAULT_DATA: SyncStorage = {
+    ankiEnabled: true,
+    ankiExpressionField: 'Expression',
+    ankiKanjiEnabled: true,
+    ankiKanjiField: 'Kanji',
+    ankiKanjiQuery: '"note:JP Kanji"',
+    ankiQuery: '"note:JP Vocab"',
+    ankiUrl: 'http://127.0.0.1:8765',
+    enabled: true,
+    furigana: FuriganaMode.HIRAGANA,
+  }
   storage = await chrome.storage.sync.get<SyncStorage>()
+  for (const key in DEFAULT_DATA)
+    if (
+      typeof storage[key as keyof SyncStorage] !==
+      typeof DEFAULT_DATA[key as keyof SyncStorage]
+    )
+      storage[key as 'enabled'] = DEFAULT_DATA[key as 'enabled']
+  await chrome.storage.sync.set<SyncStorage>(storage)
+}
 
-  // Pitch accents
+async function initializePitchAccents() {
   const pitchText = await fetch(chrome.runtime.getURL('assets/accents.txt'))
     .then((res) => res.text())
     .then((text) => text.split('\n'))
@@ -284,8 +304,9 @@ async function initialize() {
     pitch.set(kanji!, pitchValueNumber)
     pitch.set(hiragana!, pitchValueNumber)
   }
+}
 
-  // Tokenizer
+async function initializeTokenizer() {
   await __wbg_init()
   const dictionaries = await listDictionaries()
   if (dictionaries.length !== 1 || dictionaries[0] !== DICT_NAME) {
@@ -311,20 +332,12 @@ async function initialize() {
   builder.setDictionaryInstance(dict)
   builder.setMode('normal')
   tokenizer = builder.build()
+}
 
-  // Message listener
-  chrome.runtime.onMessage.addListener(async (message: Message) => {
-    switch (message.type) {
-      case 'tokenize':
-        return tokenize(message.text)
-      case 'checkConnection':
-        return checkConnection()
-      case 'storageGet':
-        return chrome.storage.sync.get()
-      case 'storageSet':
-        return storageSet(message.data)
-      case 'getKanjiIntervals':
-        return getKanjiIntervals()
-    }
-  })
+function initialize() {
+  return Promise.all([
+    initializeStorage(),
+    initializePitchAccents(),
+    initializeTokenizer(),
+  ])
 }

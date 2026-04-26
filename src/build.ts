@@ -47,10 +47,15 @@ for (const target of targets) {
   })
   writeFileSync(
     `${outdir}/background.js`,
-    readFileSync(`${outdir}/background.js`, 'utf-8').replace(
-      'new URL("lindera_wasm_bg.wasm",import.meta.url)',
-      `chrome.runtime.getURL("assets/lindera_wasm_bg.wasm")`,
-    ),
+    readFileSync(`${outdir}/background.js`, 'utf-8')
+      .replace(
+        'new URL("lindera_wasm_bg.wasm",import.meta.url)',
+        `chrome.runtime.getURL("assets/lindera_wasm_bg.wasm")`,
+      )
+      .replace(
+        'new URL("lindera_wasm_bg.wasm", import.meta.url)',
+        `chrome.runtime.getURL("assets/lindera_wasm_bg.wasm")`,
+      ),
   )
   await $`cd ${outdir} && zip -qr ../anki-annotation.${target === 'firefox' ? 'xpi' : 'zip'} .`
 }
