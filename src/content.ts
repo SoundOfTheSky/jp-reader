@@ -1,4 +1,4 @@
-import { Semaphore, wait } from '@softsky/utils'
+import { Semaphore } from '@softsky/utils'
 
 import { getKanjiIntervals, SyncStorage, tokenize } from './shared'
 
@@ -30,11 +30,11 @@ const annotateSemaphore = new Semaphore(1)
 
 // CSS + highlights
 const HIGHLIGHTS = [
-  ['gray', 21],
-  ['aqua', 7],
-  ['lawngreen', 1],
-  ['gold', 0],
-  ['red', -Infinity],
+  ['gray', 21, new Highlight()],
+  ['aqua', 7, new Highlight()],
+  ['lawngreen', 1, new Highlight()],
+  ['gold', 0, new Highlight()],
+  ['red', -Infinity, new Highlight()],
 ] as const
 injectCSS()
 
@@ -98,10 +98,12 @@ function injectCSS() {
   text-decoration: ${name} wavy underline;
 }
 
-.${JPREADER}-${name}-kanji {
+::highlight(${JPREADER}-${name}) {
   color: ${name};
-} `,
+}`,
   ).join('\n')
+  for (const [name, , highlight] of HIGHLIGHTS)
+    CSS.highlights.set(`${JPREADER}-${name}`, highlight)
   document.head.appendChild(style)
 }
 
@@ -152,7 +154,12 @@ async function annotate(root?: Node) {
           const isWholeRuby =
             token.furigana?.start === 0 &&
             token.furigana.end === token.text.length
-          const wrapper = document.createElement(isWholeRuby ? 'ruby' : 'span')
+          const isAlreadyRuby =
+            textNode.parentElement!.tagName === 'RUBY' ||
+            textNode.parentElement!.tagName === 'RB'
+          const wrapper = document.createElement(
+            !isAlreadyRuby && isWholeRuby ? 'ruby' : 'span',
+          )
           if (token.interval === undefined) wrapper.className = JPREADER
           else {
             for (let index = 0; index < HIGHLIGHTS.length; index++) {
@@ -170,7 +177,7 @@ async function annotate(root?: Node) {
           range.surroundContents(wrapper)
 
           // Apply furigana inside wrapper
-          if (token.furigana) {
+          if (token.furigana && !isAlreadyRuby) {
             const rt = document.createElement('rt')
             rt.textContent = token.furigana.text
             if (isWholeRuby) wrapper.appendChild(rt)
@@ -190,25 +197,13 @@ async function annotate(root?: Node) {
         }
       }
     }
-  } finally {
-    annotateSemaphore.release()
-    await annotateKanji(root)
-  }
-}
 
-async function annotateKanji(root: Node) {
-  await annotateSemaphore.acquire()
-  try {
+    // Annotate kanji
     const kanjiIntervals = await getKanjiIntervals()
     if (!kanjiIntervals) return
     const iterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT)
     let node: Text | null
-    let skipNext = false
     while ((node = iterator.nextNode() as Text | null)) {
-      if (skipNext) {
-        skipNext = false
-        continue
-      }
       const nodeText = node.nodeValue
       if (!nodeText) continue
       for (let index = 0; index < nodeText.length; index++) {
@@ -220,27 +215,23 @@ async function annotateKanji(root: Node) {
           const range = document.createRange()
           range.setStart(node, index)
           range.setEnd(node, index + 1)
-          const kanjiWrapper = document.createElement('span')
           for (let index = 0; index < HIGHLIGHTS.length; index++) {
             const highlight = HIGHLIGHTS[index]!
             if (highlight[1] <= interval) {
-              kanjiWrapper.className = `${JPREADER} ${JPREADER}-${highlight[0]}-kanji`
+              highlight[2].add(range)
               break
             }
           }
-          range.surroundContents(kanjiWrapper)
-          skipNext = true
         } catch {
           continue
         }
       }
-      await wait(1)
+      // await wait(1)
     }
   } finally {
     annotateSemaphore.release()
   }
 }
-
 /** Extract visible text with links to the nodes contaning this text */
 function* extractJapaneseNodes(root: Node) {
   const iterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT)

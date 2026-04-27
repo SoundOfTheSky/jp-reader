@@ -1,27 +1,17 @@
-# Vite + TypeScript Browser Extension (Chrome + Firefox)
+# JP-READER
 
-This scaffold builds a browser extension for both Chrome and Firefox using Vite and TypeScript.
+Browser extension for Japanese Language learners.
 
-Quick commands:
+- Adds furigana to kanji
+- Anki integration
+- Highlights words and kanji based on how familiar you are with it
 
-```bash
-npm install
-npm run build:chrome   # builds into dist/chrome
-npm run build:firefox  # builds into dist/firefox
-npm run build:all
-npm run dev            # vite dev server (for debugging frontend parts)
-```
+![Instruction1](https://github.com/SoundOfTheSky/jp-reader/raw/refs/heads/main/example.png)
 
-Files of interest:
-- [package.json](package.json)
-- [vite.config.ts](vite.config.ts)
-- [src/manifest.base.json](src/manifest.base.json)
-- [src/manifest.firefox.json](src/manifest.firefox.json)
-- [src/background.ts](src/background.ts)
-- [src/content.ts](src/content.ts)
-- [src/popup.html](src/popup.html)
+## Contribution
 
-Notes:
-- Add icons and other static assets into `public/`.
-- The build script writes the final `manifest.json` into `dist/<target>/manifest.json` after running `vite build`.
-- You can customize `src/manifest.<target>.json` to add target-specific overrides.
+1. Install [Bun](https://bun.sh/)
+2. Install dependencies `bun i`
+3. Up version in `script.txt`
+4. Lint `bun run lint`
+5. Build `bun start`

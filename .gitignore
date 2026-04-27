@@ -4,3 +4,5 @@ node_modules
 tsconfig.tsbuildinfo
 refs
 dist
+**/*.pem
+source.zip
