@@ -42,8 +42,7 @@ for (const target of targets) {
       './src/background.ts',
     ],
     outdir,
-    minify: true,
-    sourcemap: true,
+    minify: false,
   })
   writeFileSync(
     `${outdir}/background.js`,

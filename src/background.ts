@@ -38,10 +38,7 @@ type GetKanjiIntervalsMessage = {
   type: 'getKanjiIntervals'
 }
 
-// const DICT_NAME = 'lindera-ipadic-3.0.5'
-// const DICT_DETAILS_READING = 7
-// const DICT_DETAILS_BASE_FORM = 6
-const DICT_NAME = 'lindera-unidic-3.0.5'
+const DICT_NAME = 'lindera-unidic-3.0.6'
 const DICT_DETAILS_READING = 9
 const DICT_DETAILS_BASE_FORM = 7
 const ankiIntervals = new Map<string, number>()
@@ -133,6 +130,8 @@ async function tokenize(text: string): Promise<TokenizeResult[]> {
     const pitchAccent = pitch.get(tokenBaseForm)
     if (pitchAccent !== undefined) result.pitch = pitchAccent
 
+    if (tokenSurface === '電車')
+      console.log(token.surface, [...token.details], result)
     return result
   })
 }
@@ -176,8 +175,8 @@ async function updateAnkiIntervals() {
   await ankiSemaphore.acquire()
   try {
     const now = Date.now()
-    // Every 5 minutes
-    if (now - lastAnkiIntervalsUpdate < 300000) return
+    // Cooldown
+    if (now - lastAnkiIntervalsUpdate < 60000) return
     if (
       storage.ankiQuery &&
       storage.ankiExpressionField &&
@@ -309,9 +308,11 @@ async function initializePitchAccents() {
 async function initializeTokenizer() {
   await __wbg_init()
   const dictionaries = await listDictionaries()
+  console.log(dictionaries)
   if (dictionaries.length !== 1 || dictionaries[0] !== DICT_NAME) {
     for (let index = 0; index < dictionaries.length; index++)
       await removeDictionary(dictionaries[index]!)
+    console.log('downloading')
     await downloadDictionary(
       chrome.runtime.getURL(`assets/${DICT_NAME}.zip`),
       DICT_NAME,

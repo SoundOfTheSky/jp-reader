@@ -1,18 +1,17 @@
 {
   "name": "browser-extension-vite-ts",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "private": true,
   "scripts": {
     "start": "bun run src/build.js"
   },
   "devDependencies": {
     "@softsky/configs": "^1.3.5",
-    "@types/bun": "^1.3.12",
+    "@types/bun": "^1.3.13",
     "@types/chrome": "^0.1.40"
   },
   "dependencies": {
-    "@patdx/kuromoji": "^1.0.4",
     "@softsky/utils": "^2.8.4",
-    "lindera-wasm-web": "^3.0.5"
+    "lindera-wasm-web": "^3.0.7"
   }
 }

@@ -1,18 +1,23 @@
-import { Semaphore } from '@softsky/utils'
+import { Semaphore, wait } from '@softsky/utils'
 
 import { getKanjiIntervals, SyncStorage, tokenize } from './shared'
 
+const IGNORED_TEXT = new Set(
+  '。.、,「」[]『』・？?！!（）()【】ー-—…０１２３４５６７８９',
+)
 const JPREADER = 'jp-reader'
 let storage: SyncStorage
+const annotateSemaphore = new Semaphore(1)
+const IGNORED_TAGS = new Set(['RT', 'RP', 'SCRIPT', 'STYLE'])
+
 // Wait for load
 void Promise.all([
   // Page load
   new Promise<void>((resolve) => {
-    if (document.readyState !== 'loading') resolve()
-    else
-      document.addEventListener('DOMContentLoaded', () => {
-        resolve()
-      })
+    const interval = setInterval(() => {
+      clearInterval(interval)
+      resolve()
+    }, 500)
   }),
   // Storage load
   chrome.storage.sync.get<SyncStorage>().then((x) => (storage = x)),
@@ -25,8 +30,6 @@ void Promise.all([
   )
   reload()
 })
-
-const annotateSemaphore = new Semaphore(1)
 
 // CSS + highlights
 const HIGHLIGHTS = [
@@ -42,48 +45,11 @@ const observer = new MutationObserver((mutations) => {
   for (let index = 0; index < mutations.length; index++) {
     const mutation = mutations[index]!
     // Text changes
-    if (mutation.type === 'characterData') {
-      const parent = mutation.target.parentElement!
-      if (
-        parent.tagName !== 'RT' &&
-        parent.tagName !== 'RP' &&
-        !parent.classList.contains(JPREADER) &&
-        // If text node check next and previous sibling for JPREADER
-        !(
-          mutation.target.previousSibling as
-            | { classList?: DOMTokenList }
-            | undefined
-        )?.classList?.contains(JPREADER) &&
-        !(
-          mutation.target.nextSibling as
-            | { classList?: DOMTokenList }
-            | undefined
-        )?.classList?.contains(JPREADER)
-      )
-        void annotate(mutation.target)
-    } else {
+    if (mutation.type === 'characterData') void annotate(mutation.target)
+    else
       // New nodes added
-      const addedNodes = mutation.addedNodes
-      for (let index = 0; index < addedNodes.length; index++) {
-        const node = addedNodes[index]!
-        if (
-          // If text node check next and previous sibling for JPREADER
-          (node.nodeType === 3 &&
-            ((
-              node.previousSibling as { classList?: DOMTokenList } | undefined
-            )?.classList?.contains(JPREADER) ||
-              (
-                node.nextSibling as { classList?: DOMTokenList } | undefined
-              )?.classList?.contains(JPREADER))) ||
-          // Check if element is JPREADER
-          node.parentElement!.classList.contains(JPREADER) ||
-          // Check if parent is JPREADER
-          (node as { classList?: DOMTokenList }).classList?.contains(JPREADER)
-        )
-          continue
-        void annotate(node)
-      }
-    }
+      for (let index = 0; index < mutation.addedNodes.length; index++)
+        void annotate(mutation.addedNodes[index]!)
   }
 })
 
@@ -123,57 +89,80 @@ function reload() {
 }
 
 /** Annotate node block */
-async function annotate(root?: Node) {
-  if (!root) return
+async function annotate(root: Node) {
   await annotateSemaphore.acquire()
   try {
+    // This insane condition tries to filter out already processed blocks
+    const parent = root.parentElement
+    if (
+      !parent ||
+      parent.classList.contains(JPREADER) ||
+      !parent.isConnected ||
+      (root.nodeType === 3
+        ? !root.nodeValue ||
+          IGNORED_TAGS.has(parent.tagName) ||
+          (
+            root.previousSibling as { classList?: DOMTokenList } | undefined
+          )?.classList?.contains(JPREADER) ||
+          (
+            root.nextSibling as { classList?: DOMTokenList } | undefined
+          )?.classList?.contains(JPREADER)
+        : root.nodeType !== 1 ||
+          (root as HTMLElement).classList.contains(JPREADER) ||
+          IGNORED_TAGS.has((root as HTMLElement).tagName))
+    )
+      return
+    // console.log('Annotate', root)
+
     // Remove all existing annotations to avoid duplication
     removeAnnotations(root)
 
-    // Extract japanese nodes and tokenize
-    for (const textNode of extractJapaneseNodes(root)) {
-      const text = textNode.nodeValue!
+    const iterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT)
+    let node: Text | null
+    while ((node = iterator.nextNode() as Text | null)) {
+      if (
+        node.parentElement &&
+        (IGNORED_TAGS.has(node.parentElement.tagName) ||
+          node.parentElement.classList.contains(JPREADER))
+      )
+        continue
+
+      // Check if contains japanese and kanji
+      const text = node.nodeValue
+      if (!text) continue
+
+      // Is japanese
+      if (!isJapanese(text)) continue
+
       const tokens = await tokenize(text)
       for (let index = tokens.length - 1; index !== -1; index--) {
         try {
           const token = tokens[index]!
-
-          // Skip non-japanese results of tokenizer
-          let isJapanese = Boolean(token.furigana)
-          if (!isJapanese)
-            for (let index = 0; index < token.text.length; index++) {
-              const charCode = token.text.charCodeAt(index)
-              if (charCode > 12288 && charCode < 40960) {
-                isJapanese = true
-                break
-              }
-            }
-          if (!isJapanese) continue
-
+          if (!isJapanese(token.text)) continue
           // Apply interval
           const isWholeRuby =
             token.furigana?.start === 0 &&
             token.furigana.end === token.text.length
           const isAlreadyRuby =
-            textNode.parentElement!.tagName === 'RUBY' ||
-            textNode.parentElement!.tagName === 'RB'
+            node.parentElement?.tagName === 'RUBY' ||
+            node.parentElement?.tagName === 'RB'
           const wrapper = document.createElement(
             !isAlreadyRuby && isWholeRuby ? 'ruby' : 'span',
           )
           if (token.interval === undefined) wrapper.className = JPREADER
-          else {
+          else
             for (let index = 0; index < HIGHLIGHTS.length; index++) {
               const x = HIGHLIGHTS[index]!
               if (x[1] <= token.interval) {
+                if (token.text === '電車') console.log(token, x)
                 wrapper.classList = `${JPREADER} ${JPREADER}-${x[0]}`
                 break
               }
             }
-          }
 
           const range = new Range()
-          range.setStart(textNode, token.position)
-          range.setEnd(textNode, token.position + token.text.length)
+          range.setStart(node, token.position)
+          range.setEnd(node, token.position + token.text.length)
           range.surroundContents(wrapper)
 
           // Apply furigana inside wrapper
@@ -183,7 +172,6 @@ async function annotate(root?: Node) {
             if (isWholeRuby) wrapper.appendChild(rt)
             else {
               const ruby = document.createElement('ruby')
-              ruby.className = JPREADER
               const range = document.createRange()
               const node = wrapper.childNodes[0]!
               range.setStart(node, token.furigana.start)
@@ -198,14 +186,16 @@ async function annotate(root?: Node) {
       }
     }
 
-    // Annotate kanji
+    // Annotate kanji + cleanup empty nodes
     const kanjiIntervals = await getKanjiIntervals()
-    if (!kanjiIntervals) return
-    const iterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT)
-    let node: Text | null
-    while ((node = iterator.nextNode() as Text | null)) {
+    let lastUpdate = Date.now()
+    while ((node = iterator.previousNode() as Text | null)) {
       const nodeText = node.nodeValue
-      if (!nodeText) continue
+      if (!nodeText) {
+        node.remove()
+        continue
+      }
+      if (!kanjiIntervals) continue
       for (let index = 0; index < nodeText.length; index++) {
         try {
           const charCode = nodeText.charCodeAt(index)
@@ -226,78 +216,38 @@ async function annotate(root?: Node) {
           continue
         }
       }
-      // await wait(1)
+      const now = Date.now()
+      if (now - lastUpdate > 100) {
+        lastUpdate = now
+        await wait(1)
+      }
     }
   } finally {
     annotateSemaphore.release()
   }
 }
-/** Extract visible text with links to the nodes contaning this text */
-function* extractJapaneseNodes(root: Node) {
-  const iterator = document.createNodeIterator(root, NodeFilter.SHOW_TEXT)
-  let text: Text | null
-  let parent
-  let skipParent = false
-  while ((text = iterator.nextNode() as Text | null)) {
-    // On parent update, check if it's invisible
-    if (parent !== text.parentElement!) {
-      parent = text.parentElement!
-      // Ignore if too small or furigana
-      if (
-        (parent.offsetWidth < 2 && parent.offsetHeight < 2) ||
-        parent.tagName === 'RT' ||
-        parent.tagName === 'RP' ||
-        parent.classList.contains(JPREADER)
-      ) {
-        skipParent = true
-        continue
-      }
-
-      // Ignore if hidden
-      const style = getComputedStyle(parent)
-      if (
-        style.display === 'none' ||
-        style.visibility === 'hidden' ||
-        style.visibility === 'collapse' ||
-        style.opacity === '0'
-      ) {
-        skipParent = true
-        continue
-      }
-      skipParent = false
-    }
-    if (skipParent) continue
-
-    // Check if contains japanese and kanji
-    const nodeText = text.nodeValue
-    if (!nodeText) continue
-
-    // Is japanese
-    let containsJapanese = false
-    for (let index = 0; index < nodeText.length; index++) {
-      const charCode = nodeText.charCodeAt(index)
-      if (charCode > 12288 && charCode < 40960) {
-        containsJapanese = true
-        break
-      }
-    }
-    if (!containsJapanese) continue
-    yield text
-  }
-}
 
 /** Removes annotations. Except kanji ones... */
 function removeAnnotations(node: Node) {
-  if (node.nodeType === 1) {
-    const element = node as HTMLElement
-    const readers: HTMLElement[] = []
-    if (element.classList.contains(JPREADER)) readers.push(element)
-    for (const el of element.querySelectorAll<HTMLElement>('.' + JPREADER))
-      readers.push(el)
-    for (const reader of readers) {
-      const clone = reader.cloneNode(true) as HTMLElement
-      for (const rt of clone.querySelectorAll('rt, rp')) rt.remove()
-      reader.replaceWith(document.createTextNode(clone.textContent))
-    }
+  if (node.nodeType !== 1) return
+  const element = node as HTMLElement
+  const readers: HTMLElement[] = []
+  if (element.classList.contains(JPREADER)) readers.push(element)
+  for (const el of element.querySelectorAll<HTMLElement>('.' + JPREADER))
+    readers.push(el)
+  for (const reader of readers) {
+    const clone = reader.cloneNode(true) as HTMLElement
+    for (const rt of clone.querySelectorAll('rt, rp')) rt.remove()
+    reader.replaceWith(clone.childNodes[0]!)
   }
+}
+
+/** Does text contain japanese */
+function isJapanese(text: string) {
+  if (text.length === 1 && IGNORED_TEXT.has(text)) return false
+  for (let index = 0; index < text.length; index++) {
+    const charCode = text.charCodeAt(index)
+    if (charCode > 12288 && charCode < 40960) return true
+  }
+  return false
 }
