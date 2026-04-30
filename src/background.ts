@@ -40,7 +40,7 @@ type GetKanjiIntervalsMessage = {
 
 const DICT_NAME = 'lindera-unidic-3.0.6'
 const DICT_DETAILS_READING = 9
-const DICT_DETAILS_BASE_FORM = 7
+const DICT_DETAILS_BASE_FORM = 10
 const ankiIntervals = new Map<string, number>()
 const ankiKanjiIntervals = new Map<string, number>()
 const pitch = new Map<string, number>()
@@ -54,6 +54,7 @@ let tokenizer: Tokenizer
 const initPromise = initialize()
 
 chrome.runtime.onMessage.addListener(async (message: Message) => {
+  // Wait for initialization
   await initPromise
   switch (message.type) {
     case 'tokenize':
@@ -129,9 +130,6 @@ async function tokenize(text: string): Promise<TokenizeResult[]> {
 
     const pitchAccent = pitch.get(tokenBaseForm)
     if (pitchAccent !== undefined) result.pitch = pitchAccent
-
-    if (tokenSurface === '電車')
-      console.log(token.surface, [...token.details], result)
     return result
   })
 }
@@ -308,11 +306,9 @@ async function initializePitchAccents() {
 async function initializeTokenizer() {
   await __wbg_init()
   const dictionaries = await listDictionaries()
-  console.log(dictionaries)
   if (dictionaries.length !== 1 || dictionaries[0] !== DICT_NAME) {
     for (let index = 0; index < dictionaries.length; index++)
       await removeDictionary(dictionaries[index]!)
-    console.log('downloading')
     await downloadDictionary(
       chrome.runtime.getURL(`assets/${DICT_NAME}.zip`),
       DICT_NAME,
