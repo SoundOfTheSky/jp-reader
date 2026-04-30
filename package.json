@@ -1,6 +1,6 @@
 {
   "name": "browser-extension-vite-ts",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "private": true,
   "scripts": {
     "start": "bun run src/build.js"
